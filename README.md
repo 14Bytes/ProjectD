@@ -1,1 +1,3 @@
-# dot config files for Dev&Ops
+# Project D
+
+> Dotfile 4 DevSecOps
