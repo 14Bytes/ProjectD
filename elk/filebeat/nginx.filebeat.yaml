@@ -1,0 +1,18 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /data/logs/nginx/access.log
+      - /data/logs/nginx/error.log
+    json.keys_under_root: false
+    json.overwrite_keys: true
+    json.add_error_key: true
+    json.message_key: clientip
+
+setup.template.settings:
+  index.number_of_shards: 1
+
+output.logstash:
+  hosts: ["logstash:5044"]
+  username: "elastic"
+  password: "changeme"
