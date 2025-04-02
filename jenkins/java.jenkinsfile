@@ -1,0 +1,24 @@
+pipeline {
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+    }
+
+    tools {
+        jdk 'jdk8'
+        maven 'maven3'
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'master', credentialsId: 'git-credentials', url: 'https://github.com/example/example.git'
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh "mvn compile"
+            }
+        }
+    }
+}
