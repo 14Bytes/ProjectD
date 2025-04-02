@@ -20,5 +20,111 @@ pipeline {
                 sh "mvn compile"
             }
         }
+
+        stage('Maven Unit Test') {
+            steps {
+                sh "mvn test"
+            }
+        }
+
+        stage('Trivy File System Scan') {
+            steps {
+                sh "trivy fs --format table -o trivy-fs-report.html ."
+            }
+        }
+
+        stage('SonarQube Code Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''
+                    ${SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectName=example -Dsonar.projectKey=example -Dsonar.java.binaries=.
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate Check') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                }
+            }
+        }
+
+        stage('Build Artifact') {
+            steps {
+                sh "mvn package"
+            }
+        }
+
+        stage('Publish Artifact to Nexus') {
+            steps {
+                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk8', maven: 'maven3', traceability: true) {
+                    sh "mvn deploy"
+                }
+            }
+        }
+
+        stage('Build add Tag Docker Image') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker build -t example/example:latest ."
+                    }
+                }
+            }
+        }
+
+        stage('Docker Image Security Scan') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "trivy image --format table -o trivy-image-report.html example/example:latest"
+                    }
+                }
+            }
+        }
+
+        stage ('Push Docker Image to Registry') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker push example/example:latest"
+                    }
+                }
+            }
+        }
+
+        stage("Deploy to Kubernetes") {
+            steps {
+                withKubeConfig(credentialsId: 'k8s-cred', namespace: 'example-namespace', serverUrl: 'https://k8s-master-url:6443') {
+                    sh "kubectl apply -f deployment-service.yaml"
+                    sh "kubectl get pods -n example-namespace"
+                }
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                def jobName = env.JOB_NAME
+                def buildNumber = env.BUILD_NUMBER
+                def pipelineStatus = currentBuild.result ?: 'UNKNOWN'
+                def body = """
+                ${ jobName } - Build ${ buildNumber }
+                Pipeline Status: ${ pipelineStatus.toUpperCase() }
+                Check th console output for more details.
+                """
+                emailext(
+                    subject: "${ jobName } - Build ${ buildNumber } - Pipeline Status: ${ pipelineStatus.toUpperCase() }",
+                    body: body,
+                    to: 'email@address'
+                    from: 'email@address'
+                    replyTo: 'email@address'
+                    mimeType: 'text/html'
+                    attachmentPattern: 'trivy-image-report.html'
+                )
+            }
+        }
     }
 }
