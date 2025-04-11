@@ -1,0 +1,33 @@
+pipeline {
+    agent any
+
+    stage('Git Checkout') {
+        steps {
+            git branch: 'master', credentialsId: 'git-credentials', url: 'https://github.com/example/example.git'
+        }
+    }
+
+    stage('Build') {
+        steps {
+            sh 'mvn clean package'
+        }
+    }
+
+    stage('Build and Tag Docker Image') {
+        steps {
+            sh 'docker build -t example/example:latest .'
+        }
+    }
+
+    stage('Push Docker Image to Harbor') {
+        steps {
+            sh 'docker push example/example:latest'
+        }
+    }
+
+    stage('Deploy to Kubernetes') {
+        steps {
+            sh '/usr/local/bin/kubectl --kubeconfig=/data/.kubeconfig/${env.KUBE_CONTEXT}.conf apply -f ./k8s/deployment.yaml'
+            sh '/usr/local/bin/kubectl --kubeconfig=/data/.kubeconfig/${env.KUBE_CONTEXT}.conf apply -f ./k8s/service.yaml'
+        }
+}
